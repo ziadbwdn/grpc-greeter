@@ -17,6 +17,7 @@ including Protocol Buffer compilation, dependency management, and basic logging/
 - WSL-Friendly Setup: Designed with common WSL (Windows Subsystem for Linux) development challenges in mind.
 
 ## Project Structure
+```
 grpc-greeter
 ├── cmd/
 │   ├── client/       # Go gRPC client application
@@ -52,6 +53,7 @@ grpc-greeter
 ├── go.mod            # Go module definition
 ├── go.sum            # Go module checksums
 └── README.md
+```
 
 ## Getting Started
 These instructions will get a copy of the project up and running on your local machine, primarily focusing on a WSL (Windows Subsystem for Linux) Ubuntu environment.
