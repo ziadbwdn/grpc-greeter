@@ -1,0 +1,66 @@
+# docker/Dockerfile.server
+
+# Stage 1: Build the Go application
+FROM golang:1.23-alpine AS builder
+
+# Install protoc (Protocol Buffers compiler)
+# 'protobuf' package in Alpine includes the protoc binary
+RUN apk add --no-cache protobuf
+
+# Set necessary environment variables for Go modules
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy go.mod and go.sum to download dependencies
+COPY go.mod .
+COPY go.sum .
+
+# Download Go modules. This step is cached if go.mod/go.sum don't change.
+RUN go mod download
+
+# Install Go protobuf plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# --- CRITICAL FIX: Ensure /go/bin (where go install places binaries) is in PATH ---
+# protoc needs to find its plugins here.
+ENV PATH="/go/bin:$PATH"
+# --- END CRITICAL FIX ---
+
+# Copy the rest of the application source code
+COPY . .
+
+# Generate protobuf code
+# This command will now have /go/bin in its PATH, so protoc can find protoc-gen-go
+RUN chmod +x ./scripts/generate-proto.sh && /bin/sh ./scripts/generate-proto.sh
+
+# Build the server application
+# The output binary will be named 'server' and placed in the /app/bin directory.
+RUN go build -o ./bin/server ./cmd/server
+
+# Stage 2: Create the final lean image
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS connections (e.g., for gRPC reflection)
+RUN apk --no-cache add ca-certificates
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the built server binary from the builder stage
+COPY --from=builder /app/bin/server .
+
+# Copy the config.yaml file.
+# In a production setup, you might use environment variables or a secret management system
+# instead of directly copying the config file.
+COPY config.yaml .
+
+# Expose the gRPC port (default 50051 as per config.yaml)
+EXPOSE 50051
+
+# Command to run the server
+CMD ["./server"]

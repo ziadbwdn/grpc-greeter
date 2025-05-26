@@ -1,0 +1,41 @@
+services:
+  greeter-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server # Path to your server Dockerfile
+    container_name: greeter-server
+    ports:
+      - "50051:50051" # Map container port 50051 to host port 50051
+    volumes:
+      # Mount config.yaml from your host into the container
+      # This allows you to easily change server config without rebuilding the image
+      - ./config.yaml:/app/config.yaml
+    environment:
+      # Ensure the server uses the port defined in config.yaml or an env var
+      # If your config.go reads from env vars, you can pass it here.
+      # Otherwise, it will read from the mounted config.yaml.
+      GRPC_PORT: 50051
+    networks:
+      - greeter-network
+
+  greeter-client:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.client # Path to your client Dockerfile
+    container_name: greeter-client
+    depends_on:
+      - greeter-server # Ensure server starts before client
+    networks:
+      - greeter-network
+    # Command to run the client, connecting to the server by its service name
+    # The client's main.go should be configured to read the server address from an environment variable
+    # or passed as a command-line argument.
+    command: ["./client", "--server-address=greeter-server:50051"]
+    # If your client doesn't take command-line args, you might need to set an environment variable
+    # environment:
+    #   SERVER_ADDRESS: greeter-server:50051
+
+networks:
+  greeter-network:
+    driver: bridge
+

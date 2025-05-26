@@ -1,0 +1,56 @@
+# docker/Dockerfile.client
+
+# Stage 1: Build the Go application
+FROM golang:1.23-alpine AS builder
+
+# Install protoc (Protocol Buffers compiler)
+RUN apk add --no-cache protobuf
+
+# Set necessary environment variables for Go modules
+ENV CGO_ENABLED=0
+ENV GOOS=linux
+ENV GOARCH=amd64
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy go.mod and go.sum to download dependencies
+COPY go.mod .
+COPY go.sum .
+
+# Download Go modules. This step is cached if go.mod/go.sum don't change.
+RUN go mod download
+
+# Install Protobuf plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# --- CRITICAL FIX: Ensure /go/bin (where go install places binaries) is in PATH ---
+ENV PATH="/go/bin:$PATH"
+# --- END CRITICAL FIX ---
+
+# Copy the rest of the application source code
+COPY . .
+
+# Generate protobuf code (client also needs generated code to compile)
+RUN chmod +x ./scripts/generate-proto.sh && /bin/sh ./scripts/generate-proto.sh
+
+# Build the client application
+# The output binary will be named 'client' and placed in the /app/bin directory.
+RUN go build -o ./bin/client ./cmd/client
+
+# Stage 2: Create the final lean image
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS connections (e.g., for gRPC reflection)
+RUN apk --no-cache add ca-certificates
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the built client binary from the builder stage
+COPY --from=builder /app/bin/client .
+
+# Command to run the client
+# This will be overridden by docker-compose.yml to connect to the server.
+CMD ["./client"]
